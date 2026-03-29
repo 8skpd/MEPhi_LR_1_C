@@ -4,7 +4,6 @@
 #include <string.h>
 
 Matrix* create_matrix(int rows, int cols, const TypeHandler *handler) {
-    // Проверка входных данных
     if (rows <= 0 || cols <= 0) {
         fprintf(stderr, "Неверные размеры матрицы\n");
         return NULL;
@@ -15,14 +14,12 @@ Matrix* create_matrix(int rows, int cols, const TypeHandler *handler) {
         return NULL;
     }
 
-    // Выделение памяти под структуру
     Matrix *m = (Matrix*)malloc(sizeof(Matrix));
     if (m == NULL) {
         fprintf(stderr, "Ошибка выделения памяти под метаданные матрицы\n");
         return NULL;
     }
 
-    // Выделение памяти под данные
     size_t data_size = rows * cols * handler->element_size;
     m->data = malloc(data_size);
     if (m->data == NULL) {
@@ -31,7 +28,6 @@ Matrix* create_matrix(int rows, int cols, const TypeHandler *handler) {
         return NULL;
     }
 
-    // Инициализация
     m->rows = rows;
     m->cols = cols;
     m->handler = handler;
@@ -50,24 +46,32 @@ void free_matrix(Matrix *m) {
 }
 
 void matrix_set(Matrix *m, int row, int col, const void *value) {
+    if (m == NULL || value == NULL) return;  // ← Добавлена проверка
     if (row < 0 || row >= m->rows || col < 0 || col >= m->cols) return;
-    const TypeHandler *h = m->handler;
-    h->set_element(m->data, row * m->cols + col, value);
+    m->handler->set_element(m->data, row * m->cols + col, value);
 }
 
 void matrix_get(Matrix *m, int row, int col, void *out_value) {
+    if (m == NULL || out_value == NULL) return;  // ← Добавлена проверка
     if (row < 0 || row >= m->rows || col < 0 || col >= m->cols) return;
-    const TypeHandler *h = m->handler;
-    h->get_element(m->data, row * m->cols + col, out_value);
+    m->handler->get_element(m->data, row * m->cols + col, out_value);
 }
 
 Matrix* matrix_add(const Matrix *A, const Matrix *B) {
+    // ✅ ПРОВЕРКА NULL ПЕРЕД ДЕРЕФЕРЕНЦИЕЙ
+    if (A == NULL || B == NULL) {
+        fprintf(stderr, "Попытка сложения с NULL матрицей\n");
+        return NULL;
+    }
+    
     if (A->rows != B->rows || A->cols != B->cols || A->handler != B->handler) {
         fprintf(stderr, "Разный размер или тип данных матриц\n");
         return NULL;
     }
 
     Matrix *C = create_matrix(A->rows, A->cols, A->handler);
+    if (C == NULL) return NULL;
+    
     const TypeHandler *h = A->handler;
     int total = A->rows * A->cols;
 
@@ -81,19 +85,24 @@ Matrix* matrix_add(const Matrix *A, const Matrix *B) {
 }
 
 Matrix* matrix_multiply(const Matrix *A, const Matrix *B) {
+    if (A == NULL || B == NULL) {
+        fprintf(stderr, "Попытка умножения с NULL матрицей\n");
+        return NULL;
+    }
+    
     if (A->cols != B->rows || A->handler != B->handler) {
         fprintf(stderr, "Количество столбцов первой матрицы не совпадает с количеством строк второй или разный тип данных матриц\n");
         return NULL;
     }
 
     Matrix *C = create_matrix(A->rows, B->cols, A->handler);
+    if (C == NULL) return NULL;
+    
     const TypeHandler *h = A->handler;
 
-    // Указатели
     const void *ptrA;
     const void *ptrB;
     void *ptrC;
-    // Буферы
     char tempA[h->element_size];
     char tempB[h->element_size];
     char tempProd[h->element_size];
@@ -103,18 +112,14 @@ Matrix* matrix_multiply(const Matrix *A, const Matrix *B) {
 
     for (i = 0; i < A->rows; i++) {
         for (j = 0; j < B->cols; j++) {
-
             h->set_zero(C->data, i * C->cols + j);
-            
-            // Получаем указатель на результат один раз для внутреннего цикла
             ptrC = (char*)C->data + (i * C->cols + j) * h->element_size;
-            memcpy(tempProd, ptrC, h->element_size); // Считываем текущий ноль
+            memcpy(tempProd, ptrC, h->element_size);
 
             for (k = 0; k < A->cols; k++) {
                 ptrA = (const char*)A->data + (i * A->cols + k) * h->element_size;
                 ptrB = (const char*)B->data + (k * B->cols + j) * h->element_size;
                 
-                // Копируем данные в буферы
                 memcpy(tempA, ptrA, h->element_size);
                 memcpy(tempB, ptrB, h->element_size);
                 
@@ -122,7 +127,6 @@ Matrix* matrix_multiply(const Matrix *A, const Matrix *B) {
                 h->add_elements(tempProd, tempProd, tempResult);
             }
             
-            // Записываем финальный результат обратно в матрицу C
             memcpy(ptrC, tempProd, h->element_size);
         }
     }
@@ -130,7 +134,14 @@ Matrix* matrix_multiply(const Matrix *A, const Matrix *B) {
 }
 
 Matrix* matrix_transpose(const Matrix *A) {
+    if (A == NULL) {
+        fprintf(stderr, "Попытка транспонирования NULL матрицы\n");
+        return NULL;
+    }
+    
     Matrix *T = create_matrix(A->cols, A->rows, A->handler);
+    if (T == NULL) return NULL;
+    
     const TypeHandler *h = A->handler;
 
     const void *src;
@@ -150,8 +161,15 @@ void matrix_add_linear_combination(Matrix *m, int target_row,
                                    const int *source_rows,
                                    const double *coeffs,
                                    int count) {
-    const TypeHandler *h = m->handler;
+    if (m == NULL || source_rows == NULL || coeffs == NULL) {
+        fprintf(stderr, "Попытка линейной комбинации с NULL параметрами\n");
+        return;
+    }
     
+    if (count <= 0) return;  // Нечего делать
+    if (target_row < 0 || target_row >= m->rows) return;  // Неверная строка
+
+    const TypeHandler *h = m->handler;
     char temp[h->element_size];
     char scaled[h->element_size];
     
@@ -162,30 +180,30 @@ void matrix_add_linear_combination(Matrix *m, int target_row,
 
     for (int col = 0; col < m->cols; col++) {
         current = (char*)target_ptr + col * h->element_size;
-        
-        // Копируем текущее значение целевой ячейки в буфер
         memcpy(temp, current, h->element_size);
 
         for (int k = 0; k < count; k++) {
+            // Проверка на валидность исходной строки
+            if (source_rows[k] < 0 || source_rows[k] >= m->rows) continue;
+            
             src = (const char*)m->data + 
                              (source_rows[k] * m->cols + col) * h->element_size;
             
-            // Копируем значение исходной строки в буфер
             memcpy(scaled, src, h->element_size);
-            
-            // Масштабируем: scaled = scaled * coeffs[k]
             h->scale_element(scaled, scaled, coeffs[k]);
-            
-            // Прибавляем: temp = temp + scaled
             h->add_elements(temp, temp, scaled);
         }
         
-        // Записываем результат обратно в матрицу
         memcpy(current, temp, h->element_size);
     }
 }
 
 void matrix_print(const Matrix *m) {
+    if (m == NULL) {
+        fprintf(stderr, "Попытка печати NULL матрицы\n");
+        return;
+    }
+    
     const TypeHandler *h = m->handler;
     printf("Матрица (%dx%d, Тип: %s):\n", m->rows, m->cols, h->type_name);
     
@@ -203,6 +221,11 @@ void matrix_print(const Matrix *m) {
 }
 
 void matrix_fill(Matrix *m, const void *value) {
+    if (m == NULL || value == NULL) {
+        fprintf(stderr, "Попытка заполнения NULL матрицы или значения\n");
+        return;
+    }
+    
     const TypeHandler *h = m->handler;
     int total = m->rows * m->cols;
     for (int i = 0; i < total; i++) {
