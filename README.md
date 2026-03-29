@@ -4,5 +4,6 @@
 
 Чтобы скомпилировать нужно ввести:
 `make all` (или `make gui` чтобы скомпилировать только gui версию)
-`./matrix_gui_app` - gui версия
-`./matrix_app` - консольная версия
+`./bin/matrix_gui_app` - gui версия
+`./bin/matrix_app` - консольная версия
+`./bin/matrix_edge_tests` - тесты граничных значений
